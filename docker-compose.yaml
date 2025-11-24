@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cspm-ng:
+    build:
+      context: .
+      args:
+        # Passes the key from your local .env file or shell environment to the build
+        - API_KEY=${API_KEY}
+    ports:
+      - "8080:80"
+    environment:
+      - NODE_ENV=production
+    restart: always

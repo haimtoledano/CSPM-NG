@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Shield, LayoutDashboard, Database, Link as LinkIcon, Bot, Menu, Bell, Search, User, LogOut, Settings } from 'lucide-react';
+import { Shield, LayoutDashboard, Database, Link as LinkIcon, Bot, Menu, Bell, Search, User, LogOut, Settings, FileCheck } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom'; // Using react-router-dom for linking (HashRouter provided in App)
 
 interface LayoutProps {
@@ -17,6 +16,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Asset Inventory', path: '/inventory', icon: Database },
         { name: 'Connectors', path: '/connectors', icon: LinkIcon },
+        { name: 'Compliance & Policies', path: '/policies', icon: FileCheck },
         { name: 'Security Copilot', path: '/copilot', icon: Bot },
         { name: 'Platform Settings', path: '/settings', icon: Settings },
     ];
@@ -30,8 +30,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                         <Shield className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="font-bold text-lg tracking-tight">Sentinel</h1>
-                        <p className="text-xs text-slate-400">UCSSP Platform</p>
+                        <h1 className="font-bold text-lg tracking-tight">CSPM-NG</h1>
+                        <p className="text-xs text-slate-400">Unified Security</p>
                     </div>
                 </div>
 

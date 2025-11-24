@@ -66,6 +66,24 @@ export interface ChatMessage {
     isTyping?: boolean;
 }
 
+// AI Configuration Types
+export type AIProvider = 'GEMINI' | 'OLLAMA';
+
+export interface AIConfig {
+    provider: AIProvider;
+    geminiKey: string;
+    ollamaUrl: string;
+    ollamaModel: string;
+}
+
+// Syslog / Log Forwarding Types
+export interface SyslogConfig {
+    enabled: boolean;
+    host: string;
+    port: number;
+    protocol: 'UDP' | 'TCP' | 'TLS';
+}
+
 // Platform Management Types
 export type UserRole = 'Admin' | 'Auditor' | 'Viewer';
 
@@ -91,4 +109,37 @@ export interface RoleDefinition {
     name: UserRole;
     description: string;
     permissions: string[];
+}
+
+// Compliance & Policy Types
+export interface ComplianceStandard {
+    id: string;
+    name: string; // e.g., "CIS AWS Foundations v1.4"
+    description: string;
+    score: number; // 0-100
+    passing_controls: number;
+    total_controls: number;
+}
+
+export interface Policy {
+    id: string;
+    name: string;
+    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    provider: SourceType;
+    status: 'ACTIVE' | 'DISABLED';
+    description: string;
+    logic_preview?: string; // Pseudo-code or Rego
+}
+
+// Dashboard Configuration Types
+export type WidgetType = 'METRIC' | 'BAR_CHART' | 'PIE_CHART' | 'LINE_CHART';
+export type DataSource = 'GLOBAL_COMPLIANCE' | 'CRITICAL_RISKS' | 'TOTAL_ASSETS' | 'SAAS_USERS' | 'ASSETS_BY_PROVIDER' | 'RISK_TREND';
+export type WidgetSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'FULL'; 
+
+export interface DashboardWidget {
+    id: string;
+    title: string;
+    type: WidgetType;
+    dataSource: DataSource;
+    size: WidgetSize; // Controls grid column span
 }

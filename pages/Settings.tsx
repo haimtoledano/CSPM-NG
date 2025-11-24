@@ -1,13 +1,13 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Badge } from '../components/Widgets';
-import { User, AuditLog, RoleDefinition, UserRole } from '../types';
-import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock } from 'lucide-react';
+import { User, AuditLog, RoleDefinition, UserRole, AIConfig, AIProvider, SyslogConfig } from '../types';
+import { formatCEF, sendTestSyslog } from '../services/syslogService';
+import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock, Settings as SettingsIcon, Eye, EyeOff, Save, RefreshCw, Server, Cloud, X, Mail, User as UserIcon, Radio, Activity, CheckCircle, AlertTriangle } from 'lucide-react';
 
-const MOCK_USERS: User[] = [
-    { id: '1', name: 'John Doe', email: 'john.doe@sentinel.com', role: 'Admin', status: 'Active', last_login: '2023-10-27 09:30:00' },
-    { id: '2', name: 'Jane Smith', email: 'jane.smith@sentinel.com', role: 'Auditor', status: 'Active', last_login: '2023-10-26 14:15:00' },
-    { id: '3', name: 'Mike DevOps', email: 'mike.dev@sentinel.com', role: 'Viewer', status: 'Inactive', last_login: '2023-10-15 10:00:00' },
+const MOCK_USERS_DATA: User[] = [
+    { id: '1', name: 'John Doe', email: 'john.doe@cspm-ng.com', role: 'Admin', status: 'Active', last_login: '2023-10-27 09:30:00' },
+    { id: '2', name: 'Jane Smith', email: 'jane.smith@cspm-ng.com', role: 'Auditor', status: 'Active', last_login: '2023-10-26 14:15:00' },
+    { id: '3', name: 'Mike DevOps', email: 'mike.dev@cspm-ng.com', role: 'Viewer', status: 'Inactive', last_login: '2023-10-15 10:00:00' },
 ];
 
 const MOCK_ROLES: RoleDefinition[] = [
@@ -29,47 +29,157 @@ const MOCK_ROLES: RoleDefinition[] = [
 ];
 
 const MOCK_LOGS: AuditLog[] = [
-    { id: 'l1', actor: 'john.doe@sentinel.com', action: 'CREATE_CONNECTOR', target: 'AWS-Prod-01', timestamp: '2023-10-27 09:35:12', ip_address: '10.0.0.5' },
-    { id: 'l2', actor: 'jane.smith@sentinel.com', action: 'VIEW_REPORT', target: 'Compliance-Q3', timestamp: '2023-10-26 14:20:05', ip_address: '10.0.0.8' },
+    { id: 'l1', actor: 'john.doe@cspm-ng.com', action: 'CREATE_CONNECTOR', target: 'AWS-Prod-01', timestamp: '2023-10-27 09:35:12', ip_address: '10.0.0.5' },
+    { id: 'l2', actor: 'jane.smith@cspm-ng.com', action: 'VIEW_REPORT', target: 'Compliance-Q3', timestamp: '2023-10-26 14:20:05', ip_address: '10.0.0.8' },
     { id: 'l3', actor: 'system', action: 'SYNC_INVENTORY', target: 'All Providers', timestamp: '2023-10-27 00:00:00', ip_address: '127.0.0.1' },
-    { id: 'l4', actor: 'john.doe@sentinel.com', action: 'UPDATE_ROLE', target: 'mike.dev@sentinel.com', timestamp: '2023-10-25 11:10:00', ip_address: '10.0.0.5' },
+    { id: 'l4', actor: 'john.doe@cspm-ng.com', action: 'UPDATE_ROLE', target: 'mike.dev@cspm-ng.com', timestamp: '2023-10-25 11:10:00', ip_address: '10.0.0.5' },
 ];
 
+const STORAGE_KEY_CONFIG = 'CSPM_AI_CONFIG';
+const STORAGE_KEY_SYSLOG = 'CSPM_SYSLOG_CONFIG';
+
 const Settings: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs'>('users');
-    const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs' | 'config' | 'syslog'>('users');
+    
+    // User Management State
+    const [users, setUsers] = useState<User[]>(MOCK_USERS_DATA);
+    const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+    const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Viewer' as UserRole });
+
+    // AI Config State
+    const [aiConfig, setAiConfig] = useState<AIConfig>({
+        provider: 'GEMINI',
+        geminiKey: '',
+        ollamaUrl: 'http://localhost:11434',
+        ollamaModel: 'llama3'
+    });
+
+    // Syslog Config State
+    const [syslogConfig, setSyslogConfig] = useState<SyslogConfig>({
+        enabled: false,
+        host: '10.0.0.50',
+        port: 514,
+        protocol: 'UDP'
+    });
+    const [testLogOutput, setTestLogOutput] = useState('');
+
+    const [showKey, setShowKey] = useState(false);
+    const [statusMsg, setStatusMsg] = useState<{type: 'success'|'neutral', text: string}>({type: 'neutral', text: ''});
+
+    useEffect(() => {
+        const storedAI = localStorage.getItem(STORAGE_KEY_CONFIG);
+        if (storedAI) {
+            setAiConfig(JSON.parse(storedAI));
+        }
+
+        const storedSyslog = localStorage.getItem(STORAGE_KEY_SYSLOG);
+        if (storedSyslog) {
+            setSyslogConfig(JSON.parse(storedSyslog));
+        }
+    }, []);
+
+    // --- Config Handlers ---
+
+    const handleSaveConfig = () => {
+        localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(aiConfig));
+        localStorage.setItem(STORAGE_KEY_SYSLOG, JSON.stringify(syslogConfig));
+        setStatusMsg({type: 'success', text: 'Settings Saved Successfully'});
+        setTimeout(() => setStatusMsg({type: 'neutral', text: ''}), 3000);
+    };
+
+    const handleResetConfig = () => {
+        localStorage.removeItem(STORAGE_KEY_CONFIG);
+        setAiConfig({
+            provider: 'GEMINI',
+            geminiKey: '',
+            ollamaUrl: 'http://localhost:11434',
+            ollamaModel: 'llama3'
+        });
+        setStatusMsg({type: 'neutral', text: 'Reverted to Defaults'});
+    };
+
+    const updateConfig = (field: keyof AIConfig, value: string) => {
+        setAiConfig(prev => ({...prev, [field]: value}));
+    };
+
+    const updateSyslogConfig = (field: keyof SyslogConfig, value: any) => {
+        setSyslogConfig(prev => ({...prev, [field]: value}));
+    };
+
+    const handleTestSyslog = async () => {
+        try {
+            const sampleLog = MOCK_LOGS[0];
+            const output = await sendTestSyslog(syslogConfig, sampleLog);
+            setTestLogOutput(output);
+        } catch (error: any) {
+            setTestLogOutput(`Error: ${error.message}`);
+        }
+    };
+
+    // --- User Handlers ---
+
+    const handleAddUser = () => {
+        if (!newUser.name || !newUser.email) return;
+
+        const userToAdd: User = {
+            id: Date.now().toString(),
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            status: 'Active',
+            last_login: 'Never'
+        };
+
+        setUsers([...users, userToAdd]);
+        setNewUser({ name: '', email: '', role: 'Viewer' });
+        setIsAddUserModalOpen(false);
+    };
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-900">Platform Management</h2>
-                    <p className="text-slate-500">Manage users, access controls, and audit logs.</p>
+                    <p className="text-slate-500">Manage users, access controls, and system configuration.</p>
                 </div>
             </div>
 
             <Card className="overflow-hidden">
-                <div className="flex border-b border-slate-200 bg-slate-50/50">
+                <div className="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('users')}
-                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
                         <Users className="w-4 h-4" />
                         Users
                     </button>
                     <button 
                         onClick={() => setActiveTab('roles')}
-                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'roles' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'roles' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
                         <Shield className="w-4 h-4" />
                         Roles & Permissions
                     </button>
                     <button 
                         onClick={() => setActiveTab('logs')}
-                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'logs' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'logs' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
                         <FileText className="w-4 h-4" />
                         Audit Logs
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('syslog')}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'syslog' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Activity className="w-4 h-4" />
+                        Log Forwarding
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('config')}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'config' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <SettingsIcon className="w-4 h-4" />
+                        System Config
                     </button>
                 </div>
 
@@ -86,7 +196,10 @@ const Settings: React.FC = () => {
                                         className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>
-                                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                                <button 
+                                    onClick={() => setIsAddUserModalOpen(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-sm"
+                                >
                                     <Plus className="w-4 h-4" />
                                     Add User
                                 </button>
@@ -103,7 +216,7 @@ const Settings: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {MOCK_USERS.map(user => (
+                                        {users.map(user => (
                                             <tr key={user.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3">
                                                     <div>
@@ -198,8 +311,326 @@ const Settings: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* LOG FORWARDING (SYSLOG) TAB */}
+                    {activeTab === 'syslog' && (
+                        <div className="max-w-3xl space-y-6">
+                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">Syslog Configuration (CEF)</h3>
+                                        <p className="text-sm text-slate-500 mt-1">
+                                            Forward audit logs to a SIEM or Log Collector in Common Event Format.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={syslogConfig.enabled}
+                                                onChange={(e) => updateSyslogConfig('enabled', e.target.checked)}
+                                                className="sr-only peer" 
+                                            />
+                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                            <span className="ml-3 text-sm font-medium text-slate-700">{syslogConfig.enabled ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className={`space-y-4 ${!syslogConfig.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Syslog Server Host/IP</label>
+                                            <input 
+                                                type="text" 
+                                                value={syslogConfig.host}
+                                                onChange={(e) => updateSyslogConfig('host', e.target.value)}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                placeholder="10.0.0.50"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Port</label>
+                                            <input 
+                                                type="number" 
+                                                value={syslogConfig.port}
+                                                onChange={(e) => updateSyslogConfig('port', parseInt(e.target.value))}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                placeholder="514"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Protocol</label>
+                                            <select 
+                                                value={syslogConfig.protocol}
+                                                onChange={(e) => updateSyslogConfig('protocol', e.target.value)}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                            >
+                                                <option value="UDP">UDP (Standard)</option>
+                                                <option value="TCP">TCP</option>
+                                                <option value="TLS">TLS (Secure)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {syslogConfig.enabled && (
+                                <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 text-white">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-bold text-sm flex items-center gap-2">
+                                            <Activity className="w-4 h-4 text-emerald-400" />
+                                            Connection Test & Preview
+                                        </h3>
+                                        <button 
+                                            onClick={handleTestSyslog}
+                                            className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded transition-colors"
+                                        >
+                                            Send Test Log
+                                        </button>
+                                    </div>
+                                    
+                                    {testLogOutput ? (
+                                        <div className="space-y-2 animate-fadeIn">
+                                            <p className="text-xs text-slate-400">Preview of CEF Payload:</p>
+                                            <pre className="bg-black/30 p-3 rounded-lg text-[10px] font-mono text-emerald-300 break-all border border-slate-800">
+                                                {testLogOutput}
+                                            </pre>
+                                            <div className="flex items-center gap-2 text-xs text-amber-400 mt-2">
+                                                <AlertTriangle className="w-3 h-3" />
+                                                <span>Note: In a browser environment, this simulates the backend forwarding logic.</span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-500 italic">Click "Send Test Log" to generate a sample CEF message.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end pt-2">
+                                <button
+                                    onClick={handleSaveConfig}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Save Forwarding Rules
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SYSTEM CONFIG TAB */}
+                    {activeTab === 'config' && (
+                         <div className="max-w-3xl space-y-8">
+                            
+                            {/* Provider Selection */}
+                            <div>
+                                <h3 className="font-bold text-slate-900 mb-3 text-sm">AI Provider Selection</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <button 
+                                        onClick={() => updateConfig('provider', 'GEMINI')}
+                                        className={`flex items-center gap-3 p-4 border rounded-xl transition-all ${aiConfig.provider === 'GEMINI' ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                                            <Cloud className={`w-6 h-6 ${aiConfig.provider === 'GEMINI' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className={`font-bold text-sm ${aiConfig.provider === 'GEMINI' ? 'text-indigo-900' : 'text-slate-900'}`}>Google Gemini</p>
+                                            <p className="text-xs text-slate-500">Cloud-based, high speed (Default)</p>
+                                        </div>
+                                        {aiConfig.provider === 'GEMINI' && <div className="ml-auto w-3 h-3 bg-indigo-600 rounded-full"></div>}
+                                    </button>
+
+                                    <button 
+                                        onClick={() => updateConfig('provider', 'OLLAMA')}
+                                        className={`flex items-center gap-3 p-4 border rounded-xl transition-all ${aiConfig.provider === 'OLLAMA' ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                                            <Server className={`w-6 h-6 ${aiConfig.provider === 'OLLAMA' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className={`font-bold text-sm ${aiConfig.provider === 'OLLAMA' ? 'text-indigo-900' : 'text-slate-900'}`}>Local Ollama</p>
+                                            <p className="text-xs text-slate-500">Private, local inference</p>
+                                        </div>
+                                        {aiConfig.provider === 'OLLAMA' && <div className="ml-auto w-3 h-3 bg-indigo-600 rounded-full"></div>}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Config Fields */}
+                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
+                                {aiConfig.provider === 'GEMINI' ? (
+                                    <div className="space-y-4 animate-fadeIn">
+                                        <div className="flex items-start gap-3">
+                                            <SettingsIcon className="w-5 h-5 text-indigo-600 shrink-0 mt-1" />
+                                            <div>
+                                                <h3 className="font-bold text-indigo-900 text-sm">Gemini Configuration</h3>
+                                                <p className="text-xs text-indigo-700 mt-1">
+                                                    Uses Google's Generative AI API. Requires an internet connection.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <Lock className="h-4 w-4 text-slate-400" />
+                                                </div>
+                                                <input
+                                                    type={showKey ? "text" : "password"}
+                                                    value={aiConfig.geminiKey}
+                                                    onChange={(e) => updateConfig('geminiKey', e.target.value)}
+                                                    className="pl-10 pr-10 block w-full rounded-lg border-slate-300 bg-white border focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm py-2.5"
+                                                    placeholder="AI Studio API Key"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowKey(!showKey)}
+                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                                >
+                                                    {showKey ? (
+                                                        <EyeOff className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                                                    ) : (
+                                                        <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4 animate-fadeIn">
+                                        <div className="flex items-start gap-3">
+                                            <Server className="w-5 h-5 text-indigo-600 shrink-0 mt-1" />
+                                            <div>
+                                                <h3 className="font-bold text-indigo-900 text-sm">Ollama Configuration</h3>
+                                                <p className="text-xs text-indigo-700 mt-1">
+                                                    Connects to a local Ollama instance. 
+                                                    <br/>
+                                                    <span className="font-bold text-rose-600">Important:</span> You must run Ollama with <code>OLLAMA_ORIGINS="*"</code> to allow browser access.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">Base URL</label>
+                                                <input
+                                                    type="text"
+                                                    value={aiConfig.ollamaUrl}
+                                                    onChange={(e) => updateConfig('ollamaUrl', e.target.value)}
+                                                    className="block w-full rounded-lg border-slate-300 bg-white border focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm py-2 px-3"
+                                                    placeholder="http://localhost:11434"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">Model Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={aiConfig.ollamaModel}
+                                                    onChange={(e) => updateConfig('ollamaModel', e.target.value)}
+                                                    className="block w-full rounded-lg border-slate-300 bg-white border focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm py-2 px-3"
+                                                    placeholder="e.g., llama3, mistral"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2">
+                                <span className={`text-sm font-medium ${statusMsg.type === 'success' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                    {statusMsg.text}
+                                </span>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={handleResetConfig}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-rose-600 transition-colors"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                        Reset Defaults
+                                    </button>
+                                    <button
+                                        onClick={handleSaveConfig}
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        Save Configuration
+                                    </button>
+                                </div>
+                            </div>
+                         </div>
+                    )}
                 </div>
             </Card>
+
+            {/* ADD USER MODAL */}
+            {isAddUserModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-lg text-slate-900">Add New User</h3>
+                            <button onClick={() => setIsAddUserModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                                <div className="relative">
+                                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        value={newUser.name}
+                                        onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                                        className="w-full pl-10 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="e.g. Alice Engineer"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+                                <div className="relative">
+                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input 
+                                        type="email" 
+                                        value={newUser.email}
+                                        onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                                        className="w-full pl-10 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="alice@company.com"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                                <select 
+                                    value={newUser.role}
+                                    onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                >
+                                    <option value="Admin">Admin</option>
+                                    <option value="Auditor">Auditor</option>
+                                    <option value="Viewer">Viewer</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+                            <button onClick={() => setIsAddUserModalOpen(false)} className="px-4 py-2 text-slate-600 text-sm font-medium hover:text-slate-900">Cancel</button>
+                            <button 
+                                onClick={handleAddUser}
+                                disabled={!newUser.name || !newUser.email}
+                                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                Create User
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

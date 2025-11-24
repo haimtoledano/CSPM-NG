@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, Badge } from '../components/Widgets';
 import { Connector, SourceType, AuthMethod } from '../types';
@@ -18,7 +17,7 @@ const Connectors: React.FC = () => {
     
     // AWS State
     const [awsRoleArn, setAwsRoleArn] = useState('');
-    const externalId = 'sentinel-uuid-v4-5566-7788'; // Mock generated ID
+    const externalId = 'cspm-ng-uuid-v4-5566-7788'; // Mock generated ID
 
     // Azure State
     const [tenantId, setTenantId] = useState('');
@@ -38,6 +37,34 @@ const Connectors: React.FC = () => {
 
     const handleProviderSelect = (type: SourceType) => {
         setSelectedProvider(type);
+        // Reset fields when switching providers
+        setAwsRoleArn('');
+        setTenantId('');
+        setSaasDescription('');
+        setGeneratedYaml('');
+    };
+
+    const handleNewIntegration = () => {
+        setSelectedProvider(null);
+        setAwsRoleArn('');
+        setTenantId('');
+        setSaasDescription('');
+        setGeneratedYaml('');
+        setIsModalOpen(true);
+    };
+
+    const handleConfigure = (connector: Connector) => {
+        setSelectedProvider(connector.provider);
+        setIsModalOpen(true);
+
+        // Pre-fill data based on the connector for demo purposes
+        if (connector.provider === SourceType.AWS) {
+            setAwsRoleArn('arn:aws:iam::123456789012:role/CSPMAccessRole'); 
+        } else if (connector.provider === SourceType.AZURE) {
+            setTenantId('550e8400-e29b-41d4-a716-446655440000');
+        } else if (connector.provider === SourceType.SAAS_GITHUB) {
+            setSaasDescription("Connect to GitHub using OAuth2 to fetch repositories and user lists.");
+        }
     };
 
     const resetModal = () => {
@@ -46,6 +73,7 @@ const Connectors: React.FC = () => {
         setGeneratedYaml('');
         setSaasDescription('');
         setAwsRoleArn('');
+        setTenantId('');
     };
 
     return (
@@ -56,7 +84,7 @@ const Connectors: React.FC = () => {
                     <p className="text-slate-500">Manage Cloud Providers and SaaS Connectors</p>
                 </div>
                 <button 
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleNewIntegration}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors shadow-sm"
                 >
                     <Plus className="w-4 h-4" />
@@ -93,7 +121,12 @@ const Connectors: React.FC = () => {
                         </div>
 
                         <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                             <button className="text-sm font-medium text-slate-600 hover:text-indigo-600">Configure</button>
+                             <button 
+                                onClick={() => handleConfigure(connector)}
+                                className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors"
+                             >
+                                Configure
+                             </button>
                              <button className="text-sm font-medium text-rose-600 hover:text-rose-700 opacity-0 group-hover:opacity-100 transition-opacity">Disconnect</button>
                         </div>
                     </Card>
@@ -102,7 +135,7 @@ const Connectors: React.FC = () => {
 
             {/* Integration Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn">
                     <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
                         
                         {/* Header */}
@@ -158,7 +191,7 @@ const Connectors: React.FC = () => {
                                                     <h4 className="text-sm font-bold text-amber-900">Secure Access Pattern</h4>
                                                     <p className="text-xs text-amber-800 mt-1">
                                                         We use a Cross-Account IAM Role. No permanent access keys are stored. 
-                                                        Sentinel assumes this role only during scan windows.
+                                                        CSPM-NG assumes this role only during scan windows.
                                                     </p>
                                                 </div>
                                             </div>
@@ -192,7 +225,7 @@ const Connectors: React.FC = () => {
                                                         value={awsRoleArn}
                                                         onChange={(e) => setAwsRoleArn(e.target.value)}
                                                         className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" 
-                                                        placeholder="arn:aws:iam::123456789012:role/SentinelAccessRole" 
+                                                        placeholder="arn:aws:iam::123456789012:role/CSPMAccessRole" 
                                                     />
                                                 </div>
                                             </div>
@@ -236,8 +269,8 @@ const Connectors: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* GENERIC SAAS CONFIGURATION */}
-                                    {selectedProvider === SourceType.SAAS_GENERIC && (
+                                    {/* GENERIC SAAS CONFIGURATION (Matches generic or specific SaaS providers) */}
+                                    {(selectedProvider === SourceType.SAAS_GENERIC || (selectedProvider && selectedProvider.includes('SAAS'))) && (
                                         <div className="space-y-4">
                                             <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
                                                 <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">

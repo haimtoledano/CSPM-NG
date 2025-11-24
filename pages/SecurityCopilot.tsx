@@ -9,7 +9,7 @@ const SecurityCopilot: React.FC = () => {
         {
             id: '1',
             role: 'model',
-            text: 'Hello, I am the Sentinel Security Copilot. I can assist you with investigating risks, explaining vulnerabilities, or querying your asset inventory. How can I help today?',
+            text: 'Hello, I am the CSPM-NG Security Copilot. I can assist you with investigating risks, explaining vulnerabilities, or querying your asset inventory. How can I help today?',
             timestamp: new Date()
         }
     ]);
