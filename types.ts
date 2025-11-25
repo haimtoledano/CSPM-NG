@@ -34,6 +34,7 @@ export interface Asset {
     tags: Record<string, string>;
     security_posture: SecurityPosture;
     raw_metadata: any; // The original JSON
+    related_assets?: string[]; // IDs of connected assets (Graph edges)
 }
 
 // Connector Types
@@ -112,6 +113,16 @@ export interface RoleDefinition {
     permissions: string[];
 }
 
+// Notification Types
+export interface Notification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'error' | 'success';
+    timestamp: Date;
+    read: boolean;
+}
+
 // Compliance & Policy Types
 export interface ComplianceStandard {
     id: string;
@@ -143,6 +154,24 @@ export interface DashboardWidget {
     type: WidgetType;
     dataSource: DataSource;
     size: WidgetSize; // Controls grid column span
+}
+
+// Reporting Types
+export interface ReportTemplate {
+    id: string;
+    name: string;
+    description: string;
+    type: 'EXECUTIVE' | 'COMPLIANCE' | 'VULNERABILITY';
+}
+
+export interface ReportContext {
+    generatedDate: string;
+    tenantName: string;
+    totalAssets: number;
+    riskScore: number;
+    criticalIssues: number;
+    complianceScore: number;
+    topRisks: string[];
 }
 
 // Auth Types

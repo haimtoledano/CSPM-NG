@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { Asset, SourceType, AssetCategory } from '../types';
 import { Card, Badge, RiskBadge } from '../components/Widgets';
-import { Search, Filter, Cpu, Database, User, Globe, Sparkles, X, Tag, Code, Copy, ShieldAlert, Terminal, Wrench } from 'lucide-react';
+import { Search, Filter, Cpu, Database, User, Globe, Sparkles, X, Tag, Code, Copy, ShieldAlert, Terminal, Wrench, Bug, Network, Share2 } from 'lucide-react';
 import { analyzeAssetRisk, generateRemediationCode } from '../services/geminiService';
 
 // Mock Data
@@ -16,7 +17,7 @@ const MOCK_ASSETS: Asset[] = [
         tags: { env: 'prod', owner: 'platform-team', cost_center: '1001' },
         security_posture: {
             risk_score: 85,
-            vulnerabilities: ['CVE-2023-44487'],
+            vulnerabilities: ['CVE-2023-44487', 'CVE-2023-4863'],
             misconfigurations: ['Public IP Assigned', 'Port 22 Open (0.0.0.0/0)']
         },
         raw_metadata: { 
@@ -25,7 +26,8 @@ const MOCK_ASSETS: Asset[] = [
             publicIp: '54.1.2.3',
             privateIp: '10.0.0.5',
             securityGroups: ['sg-12345 (launch-wizard-1)']
-        }
+        },
+        related_assets: ['2', 'sg-1'] // Connected to Storage and Security Group
     },
     {
         id: '2',
@@ -40,7 +42,8 @@ const MOCK_ASSETS: Asset[] = [
             vulnerabilities: [],
             misconfigurations: ['Blob Public Access Allowed', 'Missing Encryption at Rest']
         },
-        raw_metadata: { sku: 'Standard_LRS', kind: 'StorageV2', accessTier: 'Hot' }
+        raw_metadata: { sku: 'Standard_LRS', kind: 'StorageV2', accessTier: 'Hot' },
+        related_assets: ['1']
     },
     {
         id: '3',
@@ -55,7 +58,8 @@ const MOCK_ASSETS: Asset[] = [
             vulnerabilities: [],
             misconfigurations: []
         },
-        raw_metadata: { mfa_enabled: true, admin: true, created_at: '2022-01-01' }
+        raw_metadata: { mfa_enabled: true, admin: true, created_at: '2022-01-01' },
+        related_assets: ['4']
     },
     {
         id: '4',
@@ -70,7 +74,21 @@ const MOCK_ASSETS: Asset[] = [
             vulnerabilities: [],
             misconfigurations: ['No PMI Password', 'Cloud Recording Auto-Delete Off']
         },
-        raw_metadata: { type: 'Licensed', pmi: 1234567890, timezone: 'America/New_York' }
+        raw_metadata: { type: 'Licensed', pmi: 1234567890, timezone: 'America/New_York' },
+        related_assets: []
+    },
+    // Extra mock asset for graph demo
+    {
+        id: 'sg-1',
+        global_id: 'arn:aws:ec2:us-east-1:123456789012:security-group/sg-12345',
+        name: 'launch-wizard-1',
+        source_type: SourceType.AWS,
+        asset_category: AssetCategory.NETWORK,
+        region: 'us-east-1',
+        tags: { type: 'security-group' },
+        security_posture: { risk_score: 80, vulnerabilities: [], misconfigurations: ['Port 22 Open'] },
+        raw_metadata: {},
+        related_assets: ['1']
     }
 ];
 
@@ -79,6 +97,7 @@ const AssetIcon = ({ type }: { type: AssetCategory }) => {
         case AssetCategory.COMPUTE: return <Cpu className="w-4 h-4 text-indigo-500" />;
         case AssetCategory.STORAGE: return <Database className="w-4 h-4 text-amber-500" />;
         case AssetCategory.IDENTITY: return <User className="w-4 h-4 text-pink-500" />;
+        case AssetCategory.NETWORK: return <Network className="w-4 h-4 text-cyan-500" />;
         default: return <Globe className="w-4 h-4 text-slate-500" />;
     }
 };
@@ -86,7 +105,7 @@ const AssetIcon = ({ type }: { type: AssetCategory }) => {
 const Inventory: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-    const [activeTab, setActiveTab] = useState<'details' | 'ai'>('details');
+    const [activeTab, setActiveTab] = useState<'details' | 'ai' | 'graph'>('details');
     const [aiAnalysis, setAiAnalysis] = useState<Record<string, string>>({}); // Cache analysis by asset ID
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     
@@ -130,6 +149,87 @@ const Inventory: React.FC = () => {
         const code = await generateRemediationCode(issue, selectedAsset);
         setRemediationCode(code);
         setIsGeneratingFix(false);
+    };
+
+    // --- GRAPH RENDERER ---
+    const renderTopologyGraph = () => {
+        if (!selectedAsset) return null;
+
+        const center = { x: 200, y: 150 };
+        const radius = 100;
+
+        // Find related assets
+        const relatedIds = selectedAsset.related_assets || [];
+        const relatedNodes = MOCK_ASSETS.filter(a => relatedIds.includes(a.id));
+
+        return (
+            <div className="flex flex-col h-full bg-slate-900 rounded-lg overflow-hidden relative">
+                <div className="absolute top-4 left-4 z-10 bg-slate-800/80 p-2 rounded text-xs text-white backdrop-blur-sm">
+                    <p className="font-bold">Topology Map</p>
+                    <p className="text-slate-400">Visualizing blast radius</p>
+                </div>
+                
+                <svg width="100%" height="100%" viewBox="0 0 400 300" className="flex-1 cursor-grab active:cursor-grabbing">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                        </marker>
+                    </defs>
+                    
+                    {/* Edges */}
+                    {relatedNodes.map((node, i) => {
+                        const angle = (i / relatedNodes.length) * 2 * Math.PI;
+                        const x = center.x + radius * Math.cos(angle);
+                        const y = center.y + radius * Math.sin(angle);
+                        return (
+                            <line 
+                                key={`line-${node.id}`}
+                                x1={center.x} y1={center.y}
+                                x2={x} y2={y}
+                                stroke="#475569" 
+                                strokeWidth="2"
+                                markerEnd="url(#arrowhead)"
+                            />
+                        );
+                    })}
+
+                    {/* Related Nodes */}
+                    {relatedNodes.map((node, i) => {
+                        const angle = (i / relatedNodes.length) * 2 * Math.PI;
+                        const x = center.x + radius * Math.cos(angle);
+                        const y = center.y + radius * Math.sin(angle);
+                        
+                        return (
+                            <g key={node.id} onClick={() => setSelectedAsset(node)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                                <circle cx={x} cy={y} r="20" fill="#1e293b" stroke={node.security_posture.risk_score > 70 ? '#f43f5e' : '#10b981'} strokeWidth="2" />
+                                <text x={x} y={y + 35} textAnchor="middle" fill="#94a3b8" fontSize="10" className="font-mono">{node.name}</text>
+                                {/* Simple Icon Simulation */}
+                                <text x={x} y={y + 4} textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">
+                                    {node.asset_category.charAt(0)}
+                                </text>
+                            </g>
+                        );
+                    })}
+
+                    {/* Center Node (Selected) */}
+                    <g>
+                        <circle cx={center.x} cy={center.y} r="25" fill="#4f46e5" stroke="white" strokeWidth="3" className="drop-shadow-lg" />
+                        <text x={center.x} y={center.y + 40} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{selectedAsset.name}</text>
+                        <text x={center.x} y={center.y + 5} textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
+                             {selectedAsset.asset_category.charAt(0)}
+                        </text>
+                    </g>
+                </svg>
+                
+                <div className="p-3 bg-slate-800 border-t border-slate-700 flex justify-between items-center text-xs text-slate-400">
+                    <div className="flex gap-4">
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Secure</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> High Risk</span>
+                    </div>
+                    <span>{relatedNodes.length} Connections</span>
+                </div>
+            </div>
+        );
     };
 
     return (
@@ -261,6 +361,12 @@ const Inventory: React.FC = () => {
                                             <Code className="w-3 h-3" /> Details
                                         </button>
                                         <button 
+                                            onClick={() => setActiveTab('graph')}
+                                            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'graph' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            <Share2 className="w-3 h-3" /> Graph
+                                        </button>
+                                        <button 
                                             onClick={() => setActiveTab('ai')}
                                             className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'ai' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                         >
@@ -285,14 +391,39 @@ const Inventory: React.FC = () => {
                                                     </div>
                                                     <div className="w-px h-10 bg-slate-200"></div>
                                                     <div className="flex flex-col">
-                                                        <span className="text-xs text-slate-500">Issues</span>
+                                                        <span className="text-xs text-slate-500">Misconfigs</span>
                                                         <span className="text-2xl font-bold text-slate-700">
                                                             {selectedAsset.security_posture.misconfigurations.length}
                                                         </span>
                                                     </div>
+                                                    <div className="w-px h-10 bg-slate-200"></div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-slate-500">Vulnerabilities</span>
+                                                        <span className={`text-2xl font-bold ${selectedAsset.security_posture.vulnerabilities.length > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
+                                                            {selectedAsset.security_posture.vulnerabilities.length}
+                                                        </span>
+                                                    </div>
                                                 </div>
+                                                
+                                                {/* Vulnerabilities List */}
+                                                {selectedAsset.security_posture.vulnerabilities.length > 0 && (
+                                                    <div className="space-y-2 mb-4">
+                                                        <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Known Vulnerabilities</h5>
+                                                        {selectedAsset.security_posture.vulnerabilities.map((vuln, i) => (
+                                                            <div key={i} className="flex flex-col gap-2 text-xs bg-amber-50 p-2 rounded-lg border border-amber-100">
+                                                                <div className="flex items-start gap-2 text-amber-700 font-medium">
+                                                                    <Bug className="w-4 h-4 shrink-0 mt-0.5" />
+                                                                    <span>{vuln}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Misconfigurations List */}
                                                 {selectedAsset.security_posture.misconfigurations.length > 0 && (
                                                     <div className="space-y-2">
+                                                        <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Misconfigurations</h5>
                                                         {selectedAsset.security_posture.misconfigurations.map((issue, i) => (
                                                             <div key={i} className="flex flex-col gap-2 text-xs bg-rose-50 p-2 rounded-lg border border-rose-100">
                                                                 <div className="flex items-start gap-2 text-rose-700 font-medium">
@@ -379,6 +510,12 @@ const Inventory: React.FC = () => {
                                                     </button>
                                                 </div>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'graph' && (
+                                        <div className="h-full">
+                                            {renderTopologyGraph()}
                                         </div>
                                     )}
 

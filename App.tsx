@@ -7,6 +7,7 @@ import Connectors from './pages/Connectors';
 import SecurityCopilot from './pages/SecurityCopilot';
 import Settings from './pages/Settings';
 import Policies from './pages/Policies';
+import Reports from './pages/Reports';
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -30,6 +31,7 @@ const App: React.FC = () => {
               <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
               <Route path="/connectors" element={<ProtectedRoute><Connectors /></ProtectedRoute>} />
               <Route path="/policies" element={<ProtectedRoute><Policies /></ProtectedRoute>} />
+              <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/copilot" element={<ProtectedRoute><SecurityCopilot /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             </Routes>

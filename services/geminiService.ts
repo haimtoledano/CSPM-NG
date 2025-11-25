@@ -1,5 +1,5 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { Asset, AIConfig, AIProvider } from '../types';
+import { Asset, AIConfig, AIProvider, ReportContext } from '../types';
 
 const STORAGE_KEY_CONFIG = 'CSPM_AI_CONFIG';
 
@@ -260,6 +260,34 @@ export const generateRemediationCode = async (misconfiguration: string, asset: A
         return "# Error generating remediation code. Check AI settings.";
     }
 };
+
+export const generateReportSummary = async (templateName: string, context: ReportContext): Promise<string> => {
+    try {
+        const prompt = `
+        Write an Executive Summary for a ${templateName} Report.
+        
+        Key Metrics:
+        - Date: ${context.generatedDate}
+        - Total Assets: ${context.totalAssets}
+        - Compliance Score: ${context.complianceScore}%
+        - Open Critical Risks: ${context.criticalIssues}
+        - Top Risks Found: ${context.topRisks.join(', ')}
+        
+        Tone: Professional, Concise, Action-Oriented.
+        Structure:
+        1. Overview of security posture.
+        2. Highlight key risks.
+        3. Strategic recommendation.
+        
+        Do not use Markdown formatting (bold/italic is okay, but no headers like #).
+        `;
+
+        return await generateUnifiedContent(prompt, "You are a CISO advisor generating a formal security report.");
+    } catch (error) {
+        console.error("Report Gen Error:", error);
+        return "Executive summary could not be generated due to an AI service error.";
+    }
+}
 
 export const chatWithSecurityCopilot = async (message: string, history: {role: string, parts: {text: string}[]}[] = []): Promise<string> => {
     try {
