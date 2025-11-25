@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, LayoutDashboard, Database, Link as LinkIcon, Bot, Menu, Bell, Search, User, LogOut, Settings, FileCheck } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom'; // Using react-router-dom for linking (HashRouter provided in App)
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -8,7 +9,14 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { isAuthenticated, currentUser, logout } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    // If on login page, render only children (full screen layout)
+    if (location.pathname === '/login') {
+        return <>{children}</>;
+    }
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -20,6 +28,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Security Copilot', path: '/copilot', icon: Bot },
         { name: 'Platform Settings', path: '/settings', icon: Settings },
     ];
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -55,13 +68,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div className="p-4 border-t border-slate-800">
                     <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700">
                         <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-                            <span className="text-xs font-bold text-slate-300">JD</span>
+                            <span className="text-xs font-bold text-slate-300">
+                                {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'JD'}
+                            </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">John Doe</p>
-                            <p className="text-xs text-slate-400 truncate">Security Admin</p>
+                            <p className="text-sm font-medium text-white truncate">{currentUser?.name || 'User'}</p>
+                            <p className="text-xs text-slate-400 truncate">{currentUser?.role || 'Viewer'}</p>
                         </div>
-                        <LogOut className="w-4 h-4 text-slate-400 hover:text-white cursor-pointer" />
+                        <button onClick={handleLogout} className="text-slate-400 hover:text-white cursor-pointer" title="Sign Out">
+                            <LogOut className="w-4 h-4" />
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -122,6 +139,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                                 </Link>
                             ))}
                         </nav>
+                        <div className="mt-8 border-t border-slate-800 pt-4">
+                            <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-rose-400 w-full">
+                                <LogOut className="w-5 h-5" />
+                                Sign Out
+                            </button>
+                        </div>
                     </div>
                 )}
 

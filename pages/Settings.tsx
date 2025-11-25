@@ -1,14 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, Badge } from '../components/Widgets';
-import { User, AuditLog, RoleDefinition, UserRole, AIConfig, AIProvider, SyslogConfig } from '../types';
-import { formatCEF, sendTestSyslog } from '../services/syslogService';
-import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock, Settings as SettingsIcon, Eye, EyeOff, Save, RefreshCw, Server, Cloud, X, Mail, User as UserIcon, Radio, Activity, CheckCircle, AlertTriangle } from 'lucide-react';
-
-const MOCK_USERS_DATA: User[] = [
-    { id: '1', name: 'John Doe', email: 'john.doe@cspm-ng.com', role: 'Admin', status: 'Active', last_login: '2023-10-27 09:30:00' },
-    { id: '2', name: 'Jane Smith', email: 'jane.smith@cspm-ng.com', role: 'Auditor', status: 'Active', last_login: '2023-10-26 14:15:00' },
-    { id: '3', name: 'Mike DevOps', email: 'mike.dev@cspm-ng.com', role: 'Viewer', status: 'Inactive', last_login: '2023-10-15 10:00:00' },
-];
+import { User, AuditLog, RoleDefinition, UserRole, AIConfig, SyslogConfig } from '../types';
+import { sendTestSyslog } from '../services/syslogService';
+import { useAuth } from '../context/AuthContext';
+import QRCode from 'qrcode';
+import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock, Settings as SettingsIcon, Eye, EyeOff, Save, RefreshCw, Server, Cloud, X, Mail, User as UserIcon, Activity, AlertTriangle, Trash2, Edit2, QrCode } from 'lucide-react';
 
 const MOCK_ROLES: RoleDefinition[] = [
     { 
@@ -39,12 +36,18 @@ const STORAGE_KEY_CONFIG = 'CSPM_AI_CONFIG';
 const STORAGE_KEY_SYSLOG = 'CSPM_SYSLOG_CONFIG';
 
 const Settings: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs' | 'config' | 'syslog'>('users');
+    const { currentUser, users, addUser, updateUser, deleteUser, getCurrentUserMfaSecret } = useAuth();
+    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs' | 'config' | 'syslog' | 'account'>('account');
     
     // User Management State
-    const [users, setUsers] = useState<User[]>(MOCK_USERS_DATA);
-    const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-    const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Viewer' as UserRole });
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [userForm, setUserForm] = useState({ name: '', email: '', role: 'Viewer' as UserRole });
+    const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+    // Account / MFA State
+    const [qrCodeUrl, setQrCodeUrl] = useState('');
+    const [showQr, setShowQr] = useState(false);
 
     // AI Config State
     const [aiConfig, setAiConfig] = useState<AIConfig>({
@@ -66,6 +69,13 @@ const Settings: React.FC = () => {
     const [showKey, setShowKey] = useState(false);
     const [statusMsg, setStatusMsg] = useState<{type: 'success'|'neutral', text: string}>({type: 'neutral', text: ''});
 
+    // Close menus when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setActiveMenuId(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
+
     useEffect(() => {
         const storedAI = localStorage.getItem(STORAGE_KEY_CONFIG);
         if (storedAI) {
@@ -77,6 +87,19 @@ const Settings: React.FC = () => {
             setSyslogConfig(JSON.parse(storedSyslog));
         }
     }, []);
+
+    // Generate QR code for My Account tab
+    useEffect(() => {
+        if (activeTab === 'account' && currentUser) {
+            const secret = getCurrentUserMfaSecret();
+            if (secret) {
+                const otpUri = `otpauth://totp/CSPM-NG:${currentUser.email}?secret=${secret}&issuer=CSPM-NG`;
+                QRCode.toDataURL(otpUri, (err, url) => {
+                    if (!err) setQrCodeUrl(url);
+                });
+            }
+        }
+    }, [activeTab, currentUser, getCurrentUserMfaSecret]);
 
     // --- Config Handlers ---
 
@@ -118,21 +141,54 @@ const Settings: React.FC = () => {
 
     // --- User Handlers ---
 
-    const handleAddUser = () => {
-        if (!newUser.name || !newUser.email) return;
+    const handleOpenAddUser = () => {
+        setEditingUser(null);
+        setUserForm({ name: '', email: '', role: 'Viewer' });
+        setIsUserModalOpen(true);
+    };
 
-        const userToAdd: User = {
-            id: Date.now().toString(),
-            name: newUser.name,
-            email: newUser.email,
-            role: newUser.role,
-            status: 'Active',
-            last_login: 'Never'
-        };
+    const handleOpenEditUser = (user: User) => {
+        setEditingUser(user);
+        setUserForm({ name: user.name, email: user.email, role: user.role });
+        setIsUserModalOpen(true);
+        setActiveMenuId(null);
+    };
 
-        setUsers([...users, userToAdd]);
-        setNewUser({ name: '', email: '', role: 'Viewer' });
-        setIsAddUserModalOpen(false);
+    const handleDeleteUser = (userId: string) => {
+        if (window.confirm('Are you sure you want to delete this user?')) {
+            deleteUser(userId);
+        }
+        setActiveMenuId(null);
+    };
+
+    const handleSaveUser = () => {
+        if (!userForm.name || !userForm.email) return;
+
+        if (editingUser) {
+            const updatedUser: User = {
+                ...editingUser,
+                name: userForm.name,
+                email: userForm.email,
+                role: userForm.role
+            };
+            updateUser(updatedUser);
+        } else {
+            const userToAdd: User = {
+                id: Date.now().toString(),
+                name: userForm.name,
+                email: userForm.email,
+                role: userForm.role,
+                status: 'Active',
+                last_login: 'Never'
+            };
+            addUser(userToAdd);
+        }
+        setIsUserModalOpen(false);
+    };
+
+    const toggleMenu = (e: React.MouseEvent, userId: string) => {
+        e.stopPropagation(); 
+        setActiveMenuId(activeMenuId === userId ? null : userId);
     };
 
     return (
@@ -146,6 +202,13 @@ const Settings: React.FC = () => {
 
             <Card className="overflow-hidden">
                 <div className="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
+                    <button 
+                        onClick={() => setActiveTab('account')}
+                        className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'account' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <UserIcon className="w-4 h-4" />
+                        My Account
+                    </button>
                     <button 
                         onClick={() => setActiveTab('users')}
                         className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
@@ -184,6 +247,72 @@ const Settings: React.FC = () => {
                 </div>
 
                 <div className="p-6">
+                    {/* MY ACCOUNT TAB */}
+                    {activeTab === 'account' && (
+                        <div className="max-w-3xl space-y-8 animate-fadeIn">
+                             <div className="flex items-start gap-6">
+                                <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-3xl font-bold text-slate-400">
+                                    {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'JD'}
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-xl font-bold text-slate-900">{currentUser?.name}</h3>
+                                    <p className="text-slate-500 flex items-center gap-2">
+                                        <Mail className="w-4 h-4" /> {currentUser?.email}
+                                    </p>
+                                    <div className="pt-2">
+                                        <Badge variant="success">Active</Badge>
+                                    </div>
+                                </div>
+                             </div>
+
+                             <div className="border-t border-slate-100 pt-6">
+                                <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <Shield className="w-5 h-5 text-indigo-600" />
+                                    Security Settings
+                                </h4>
+
+                                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h5 className="font-bold text-slate-900 text-sm">Two-Factor Authentication (MFA)</h5>
+                                            <p className="text-xs text-slate-500 mt-1 max-w-md">
+                                                Your account is secured with TOTP. Use Google Authenticator or Authy to sign in.
+                                            </p>
+                                        </div>
+                                        <Badge variant="success">Active</Badge>
+                                    </div>
+
+                                    <div className="mt-6">
+                                        {!showQr ? (
+                                            <button 
+                                                onClick={() => setShowQr(true)}
+                                                className="flex items-center gap-2 text-sm text-indigo-600 font-medium hover:bg-indigo-50 px-3 py-2 rounded-lg transition-colors border border-indigo-100"
+                                            >
+                                                <QrCode className="w-4 h-4" />
+                                                Reveal QR Code
+                                            </button>
+                                        ) : (
+                                            <div className="animate-fadeIn">
+                                                <p className="text-xs text-slate-500 mb-3">Scan this code to add your account to a new device.</p>
+                                                <div className="bg-white p-4 inline-block rounded-lg shadow-sm border border-slate-200">
+                                                    {qrCodeUrl && <img src={qrCodeUrl} alt="MFA QR" className="w-40 h-40 mix-blend-multiply" />}
+                                                </div>
+                                                <div className="mt-4">
+                                                    <button 
+                                                        onClick={() => setShowQr(false)}
+                                                        className="text-xs text-slate-400 hover:text-slate-600 underline"
+                                                    >
+                                                        Hide QR Code
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                             </div>
+                        </div>
+                    )}
+
                     {/* USERS TAB */}
                     {activeTab === 'users' && (
                         <div className="space-y-4">
@@ -197,14 +326,14 @@ const Settings: React.FC = () => {
                                     />
                                 </div>
                                 <button 
-                                    onClick={() => setIsAddUserModalOpen(true)}
+                                    onClick={handleOpenAddUser}
                                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-sm"
                                 >
                                     <Plus className="w-4 h-4" />
                                     Add User
                                 </button>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-visible">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-slate-50 border-b border-slate-200">
                                         <tr>
@@ -237,13 +366,41 @@ const Settings: React.FC = () => {
                                                     <Badge variant={user.status === 'Active' ? 'success' : 'neutral'}>{user.status}</Badge>
                                                 </td>
                                                 <td className="px-4 py-3 text-slate-500">{user.last_login}</td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <button className="text-slate-400 hover:text-slate-600">
+                                                <td className="px-4 py-3 text-right relative">
+                                                    <button 
+                                                        onClick={(e) => toggleMenu(e, user.id)}
+                                                        className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+                                                    >
                                                         <MoreVertical className="w-4 h-4" />
                                                     </button>
+                                                    {activeMenuId === user.id && (
+                                                        <div className="absolute right-8 top-0 z-20 w-48 bg-white rounded-lg shadow-lg border border-slate-100 py-1 animate-fadeIn origin-top-right">
+                                                            <button 
+                                                                onClick={() => handleOpenEditUser(user)}
+                                                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                            >
+                                                                <Edit2 className="w-4 h-4 text-slate-400" />
+                                                                Edit User
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteUser(user.id)}
+                                                                className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                                Delete User
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
+                                        {users.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">
+                                                    No users found.
+                                                </td>
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -422,8 +579,6 @@ const Settings: React.FC = () => {
                     {/* SYSTEM CONFIG TAB */}
                     {activeTab === 'config' && (
                          <div className="max-w-3xl space-y-8">
-                            
-                            {/* Provider Selection */}
                             <div>
                                 <h3 className="font-bold text-slate-900 mb-3 text-sm">AI Provider Selection</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -456,8 +611,6 @@ const Settings: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-
-                            {/* Config Fields */}
                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-6">
                                 {aiConfig.provider === 'GEMINI' ? (
                                     <div className="space-y-4 animate-fadeIn">
@@ -470,7 +623,6 @@ const Settings: React.FC = () => {
                                                 </p>
                                             </div>
                                         </div>
-
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">API Key</label>
                                             <div className="relative">
@@ -505,13 +657,11 @@ const Settings: React.FC = () => {
                                             <div>
                                                 <h3 className="font-bold text-indigo-900 text-sm">Ollama Configuration</h3>
                                                 <p className="text-xs text-indigo-700 mt-1">
-                                                    Connects to a local Ollama instance. 
-                                                    <br/>
+                                                    Connects to a local Ollama instance. <br/>
                                                     <span className="font-bold text-rose-600">Important:</span> You must run Ollama with <code>OLLAMA_ORIGINS="*"</code> to allow browser access.
                                                 </p>
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-slate-700 mb-1">Base URL</label>
@@ -537,7 +687,6 @@ const Settings: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-
                             <div className="flex items-center justify-between pt-2">
                                 <span className={`text-sm font-medium ${statusMsg.type === 'success' ? 'text-emerald-600' : 'text-slate-500'}`}>
                                     {statusMsg.text}
@@ -564,17 +713,17 @@ const Settings: React.FC = () => {
                 </div>
             </Card>
 
-            {/* ADD USER MODAL */}
-            {isAddUserModalOpen && (
+            {isUserModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn">
                     <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold text-lg text-slate-900">Add New User</h3>
-                            <button onClick={() => setIsAddUserModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                            <h3 className="font-bold text-lg text-slate-900">
+                                {editingUser ? 'Edit User' : 'Add New User'}
+                            </h3>
+                            <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
@@ -582,33 +731,31 @@ const Settings: React.FC = () => {
                                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input 
                                         type="text" 
-                                        value={newUser.name}
-                                        onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                                        value={userForm.name}
+                                        onChange={(e) => setUserForm({...userForm, name: e.target.value})}
                                         className="w-full pl-10 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                         placeholder="e.g. Alice Engineer"
                                     />
                                 </div>
                             </div>
-                            
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input 
                                         type="email" 
-                                        value={newUser.email}
-                                        onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                                        value={userForm.email}
+                                        onChange={(e) => setUserForm({...userForm, email: e.target.value})}
                                         className="w-full pl-10 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                         placeholder="alice@company.com"
                                     />
                                 </div>
                             </div>
-
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                                 <select 
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
+                                    value={userForm.role}
+                                    onChange={(e) => setUserForm({...userForm, role: e.target.value as UserRole})}
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                                 >
                                     <option value="Admin">Admin</option>
@@ -616,16 +763,20 @@ const Settings: React.FC = () => {
                                     <option value="Viewer">Viewer</option>
                                 </select>
                             </div>
+                             <div className="bg-indigo-50 p-3 rounded-lg text-xs text-indigo-700 border border-indigo-100">
+                                <p>
+                                    <strong>Note:</strong> After creating this user, they will need to enter their email on the login screen to set up their TOTP device for the first time.
+                                </p>
+                            </div>
                         </div>
-
                         <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-                            <button onClick={() => setIsAddUserModalOpen(false)} className="px-4 py-2 text-slate-600 text-sm font-medium hover:text-slate-900">Cancel</button>
+                            <button onClick={() => setIsUserModalOpen(false)} className="px-4 py-2 text-slate-600 text-sm font-medium hover:text-slate-900">Cancel</button>
                             <button 
-                                onClick={handleAddUser}
-                                disabled={!newUser.name || !newUser.email}
+                                onClick={handleSaveUser}
+                                disabled={!userForm.name || !userForm.email}
                                 className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                             >
-                                Create User
+                                {editingUser ? 'Save Changes' : 'Create User'}
                             </button>
                         </div>
                     </div>

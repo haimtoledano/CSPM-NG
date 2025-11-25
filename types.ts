@@ -94,6 +94,7 @@ export interface User {
     role: UserRole;
     status: 'Active' | 'Inactive';
     last_login: string;
+    mfaSecret?: string; // Encrypted or raw secret for TOTP
 }
 
 export interface AuditLog {
@@ -142,4 +143,30 @@ export interface DashboardWidget {
     type: WidgetType;
     dataSource: DataSource;
     size: WidgetSize; // Controls grid column span
+}
+
+// Auth Types
+export interface AuthState {
+    isAuthenticated: boolean;
+    currentUser: User | null;
+}
+
+export interface AuthContextType extends AuthState {
+    // Core Auth
+    checkEmailStatus: (email: string) => { status: 'UNKNOWN' | 'KNOWN_NO_MFA' | 'KNOWN_WITH_MFA' | 'SYSTEM_INIT' };
+    login: (email: string, code: string) => Promise<boolean>;
+    logout: () => void;
+    
+    // MFA Setup
+    generateTempSecret: () => string;
+    completeMfaSetup: (email: string, secret: string, token: string) => boolean;
+    
+    // User Management (Admin)
+    users: User[];
+    addUser: (user: User) => void;
+    updateUser: (user: User) => void;
+    deleteUser: (id: string) => void;
+    
+    // Helpers
+    getCurrentUserMfaSecret: () => string | undefined;
 }
