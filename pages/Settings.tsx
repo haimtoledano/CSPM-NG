@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, Badge } from '../components/Widgets';
 import { User, AuditLog, RoleDefinition, UserRole, AIConfig, SyslogConfig } from '../types';
 import { sendTestSyslog } from '../services/syslogService';
+import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'qrcode';
-import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock, Settings as SettingsIcon, Eye, EyeOff, Save, RefreshCw, Server, Cloud, X, Mail, User as UserIcon, Activity, AlertTriangle, Trash2, Edit2, QrCode } from 'lucide-react';
+import { Users, Shield, FileText, Plus, MoreVertical, Search, Lock, Settings as SettingsIcon, Eye, EyeOff, Save, RefreshCw, Server, Cloud, X, Mail, User as UserIcon, Activity, AlertTriangle, Trash2, Edit2, QrCode, Database, CheckCircle, PenTool } from 'lucide-react';
 
 const MOCK_ROLES: RoleDefinition[] = [
     { 
@@ -36,8 +36,8 @@ const STORAGE_KEY_CONFIG = 'CSPM_AI_CONFIG';
 const STORAGE_KEY_SYSLOG = 'CSPM_SYSLOG_CONFIG';
 
 const Settings: React.FC = () => {
-    const { currentUser, users, addUser, updateUser, deleteUser, getCurrentUserMfaSecret } = useAuth();
-    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs' | 'config' | 'syslog' | 'account'>('account');
+    const { currentUser, users, addUser, updateUser, deleteUser, getCurrentUserMfaSecret, systemConfig, updateSystemConfig } = useAuth();
+    const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'logs' | 'config' | 'syslog' | 'account' | 'setup'>('account');
     
     // User Management State
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -69,6 +69,9 @@ const Settings: React.FC = () => {
     const [showKey, setShowKey] = useState(false);
     const [statusMsg, setStatusMsg] = useState<{type: 'success'|'neutral', text: string}>({type: 'neutral', text: ''});
 
+    // Setup State
+    const [brandingForm, setBrandingForm] = useState({ appName: systemConfig.appName, logoUrl: systemConfig.logoUrl });
+
     // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = () => setActiveMenuId(null);
@@ -93,13 +96,13 @@ const Settings: React.FC = () => {
         if (activeTab === 'account' && currentUser) {
             const secret = getCurrentUserMfaSecret();
             if (secret) {
-                const otpUri = `otpauth://totp/CSPM-NG:${currentUser.email}?secret=${secret}&issuer=CSPM-NG`;
+                const otpUri = `otpauth://totp/CSPM-NG:${currentUser.email}?secret=${secret}&issuer=${systemConfig.appName}`;
                 QRCode.toDataURL(otpUri, (err, url) => {
                     if (!err) setQrCodeUrl(url);
                 });
             }
         }
-    }, [activeTab, currentUser, getCurrentUserMfaSecret]);
+    }, [activeTab, currentUser, getCurrentUserMfaSecret, systemConfig.appName]);
 
     // --- Config Handlers ---
 
@@ -137,6 +140,23 @@ const Settings: React.FC = () => {
         } catch (error: any) {
             setTestLogOutput(`Error: ${error.message}`);
         }
+    };
+
+    // --- Setup Handlers ---
+
+    const handleSaveBranding = async () => {
+        // Optimistic UI update
+        updateSystemConfig({
+            ...systemConfig,
+            appName: brandingForm.appName,
+            logoUrl: brandingForm.logoUrl
+        });
+
+        // Sync with Backend
+        await apiService.updateSystemConfig(brandingForm);
+
+        setStatusMsg({type: 'success', text: 'Branding Updated'});
+        setTimeout(() => setStatusMsg({type: 'neutral', text: ''}), 3000);
     };
 
     // --- User Handlers ---
@@ -242,8 +262,17 @@ const Settings: React.FC = () => {
                         className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'config' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
                         <SettingsIcon className="w-4 h-4" />
-                        System Config
+                        AI Settings
                     </button>
+                    {currentUser?.isSuperAdmin && (
+                        <button 
+                            onClick={() => setActiveTab('setup')}
+                            className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'setup' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <PenTool className="w-4 h-4" />
+                            Setup
+                        </button>
+                    )}
                 </div>
 
                 <div className="p-6">
@@ -255,7 +284,12 @@ const Settings: React.FC = () => {
                                     {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'JD'}
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="text-xl font-bold text-slate-900">{currentUser?.name}</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-xl font-bold text-slate-900">{currentUser?.name}</h3>
+                                        {currentUser?.isSuperAdmin && (
+                                            <Badge variant="warning">Super Admin</Badge>
+                                        )}
+                                    </div>
                                     <p className="text-slate-500 flex items-center gap-2">
                                         <Mail className="w-4 h-4" /> {currentUser?.email}
                                     </p>
@@ -349,7 +383,10 @@ const Settings: React.FC = () => {
                                             <tr key={user.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3">
                                                     <div>
-                                                        <p className="font-medium text-slate-900">{user.name}</p>
+                                                        <p className="font-medium text-slate-900 flex items-center gap-1">
+                                                            {user.name}
+                                                            {user.isSuperAdmin && <Shield className="w-3 h-3 text-amber-500" />}
+                                                        </p>
                                                         <p className="text-xs text-slate-500">{user.email}</p>
                                                     </div>
                                                 </td>
@@ -382,13 +419,15 @@ const Settings: React.FC = () => {
                                                                 <Edit2 className="w-4 h-4 text-slate-400" />
                                                                 Edit User
                                                             </button>
-                                                            <button 
-                                                                onClick={() => handleDeleteUser(user.id)}
-                                                                className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                                Delete User
-                                                            </button>
+                                                            {!user.isSuperAdmin && (
+                                                                <button 
+                                                                    onClick={() => handleDeleteUser(user.id)}
+                                                                    className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                    Delete User
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
@@ -403,6 +442,92 @@ const Settings: React.FC = () => {
                                         )}
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SETUP TAB (SUPER ADMIN ONLY) */}
+                    {activeTab === 'setup' && currentUser?.isSuperAdmin && (
+                        <div className="max-w-4xl space-y-8 animate-fadeIn">
+                            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
+                                <Shield className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <h3 className="font-bold text-amber-900 text-sm">Super Admin Area</h3>
+                                    <p className="text-xs text-amber-800 mt-1">
+                                        System-wide configuration. Changes here affect all users.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Branding Section */}
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <PenTool className="w-5 h-5 text-indigo-600" />
+                                    Branding & Appearance
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Application Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={brandingForm.appName}
+                                            onChange={(e) => setBrandingForm({...brandingForm, appName: e.target.value})}
+                                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Logo URL</label>
+                                        <input 
+                                            type="text" 
+                                            value={brandingForm.logoUrl}
+                                            onChange={(e) => setBrandingForm({...brandingForm, logoUrl: e.target.value})}
+                                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="https://example.com/logo.png"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4 border-t border-slate-100 pt-4">
+                                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                                        {brandingForm.logoUrl ? (
+                                            <img src={brandingForm.logoUrl} alt="Preview" className="w-10 h-10 object-contain" />
+                                        ) : (
+                                            <span className="text-[10px] text-slate-400">Preview</span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-slate-900">{brandingForm.appName || 'App Name'}</p>
+                                        <p className="text-xs text-slate-400">Header Preview</p>
+                                    </div>
+                                    <button 
+                                        onClick={handleSaveBranding}
+                                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                                    >
+                                        Update Branding
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Database Section - SIMPLIFIED FOR SQLITE */}
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <Database className="w-5 h-5 text-emerald-600" />
+                                    Data Storage
+                                </h3>
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4 flex items-center gap-4">
+                                    <div className="p-2 bg-white rounded-full shadow-sm">
+                                        <CheckCircle className="w-6 h-6 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-emerald-900 text-sm">Local Database Active</h4>
+                                        <p className="text-xs text-emerald-800 mt-1">
+                                            The application is running with an embedded <strong>SQLite</strong> database. 
+                                            Data is stored locally in <code>/data/cspm.db</code> inside the container.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="mt-4 text-xs text-slate-500">
+                                    To backup your data, verify the mapped volume in your Docker configuration.
+                                </div>
                             </div>
                         </div>
                     )}

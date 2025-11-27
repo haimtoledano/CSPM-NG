@@ -85,6 +85,23 @@ export interface SyslogConfig {
     protocol: 'UDP' | 'TCP' | 'TLS';
 }
 
+// System Setup Configuration
+export interface DatabaseConfig {
+    host: string;
+    port: string;
+    user: string;
+    password?: string;
+    dbName: string;
+    isInitialized: boolean;
+}
+
+export interface SystemConfig {
+    appName: string;
+    logoUrl: string;
+    dbConfig: DatabaseConfig;
+    isSetupComplete: boolean;
+}
+
 // Platform Management Types
 export type UserRole = 'Admin' | 'Auditor' | 'Viewer';
 
@@ -96,6 +113,7 @@ export interface User {
     status: 'Active' | 'Inactive';
     last_login: string;
     mfaSecret?: string; // Encrypted or raw secret for TOTP
+    isSuperAdmin?: boolean; // Only the first user gets this
 }
 
 export interface AuditLog {
@@ -198,4 +216,8 @@ export interface AuthContextType extends AuthState {
     
     // Helpers
     getCurrentUserMfaSecret: () => string | undefined;
+
+    // System Config
+    systemConfig: SystemConfig;
+    updateSystemConfig: (config: SystemConfig) => void;
 }

@@ -19,7 +19,7 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { isAuthenticated, currentUser, logout } = useAuth();
+    const { isAuthenticated, currentUser, logout, systemConfig } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     
     // Notification State
@@ -72,11 +72,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Sidebar Desktop - Hidden when printing */}
             <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white border-r border-slate-800 print:hidden">
                 <div className="flex items-center gap-3 p-6 border-b border-slate-800">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 overflow-hidden">
+                        {systemConfig.logoUrl ? (
+                            <img src={systemConfig.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                        ) : (
+                            <Shield className="w-6 h-6 text-indigo-500" />
+                        )}
                     </div>
                     <div>
-                        <h1 className="font-bold text-lg tracking-tight">CSPM-NG</h1>
+                        <h1 className="font-bold text-lg tracking-tight truncate max-w-[140px]">{systemConfig.appName}</h1>
                         <p className="text-xs text-slate-400">Unified Security</p>
                     </div>
                 </div>
@@ -106,7 +110,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                             </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{currentUser?.name || 'User'}</p>
+                            <p className="text-sm font-medium text-white truncate flex items-center gap-1">
+                                {currentUser?.name || 'User'}
+                                {currentUser?.isSuperAdmin && <Shield className="w-3 h-3 text-amber-400" />}
+                            </p>
                             <p className="text-xs text-slate-400 truncate">{currentUser?.role || 'Viewer'}</p>
                         </div>
                         <button onClick={handleLogout} className="text-slate-400 hover:text-white cursor-pointer" title="Sign Out">
