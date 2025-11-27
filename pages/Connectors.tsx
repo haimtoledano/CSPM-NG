@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Card, Badge } from '../components/Widgets';
 import { Connector, SourceType, AuthMethod } from '../types';
 import { generateConnectorYaml } from '../services/geminiService';
-import { Cloud, Plus, Command, RefreshCw, Key, Code, Lock, ExternalLink, Shield, CheckCircle, Copy } from 'lucide-react';
+import { Cloud, Plus, Command, RefreshCw, Key, Code, Lock, ExternalLink, Shield, CheckCircle, Copy, Loader2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const MOCK_CONNECTORS: Connector[] = [
     { id: '1', name: 'Production AWS', provider: SourceType.AWS, status: 'ACTIVE', last_sync: '10 mins ago', auth_method: AuthMethod.IAM_ROLE },
@@ -11,6 +13,8 @@ const MOCK_CONNECTORS: Connector[] = [
 ];
 
 const Connectors: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [connectors, setConnectors] = useState(MOCK_CONNECTORS);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProvider, setSelectedProvider] = useState<SourceType | null>(null);
@@ -21,11 +25,39 @@ const Connectors: React.FC = () => {
 
     // Azure State
     const [tenantId, setTenantId] = useState('');
+    const [clientId, setClientId] = useState('');
+    const [isConnectingAzure, setIsConnectingAzure] = useState(false);
 
     // Generic SaaS Generator State
     const [saasDescription, setSaasDescription] = useState('');
     const [generatedYaml, setGeneratedYaml] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+
+    // Check for OAuth Code on Mount
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        const state = params.get('state');
+
+        if (code && state === 'azure_connect') {
+            console.log("Received Azure Auth Code:", code);
+            
+            setConnectors(prev => [
+                ...prev,
+                { 
+                    id: Date.now().toString(), 
+                    name: 'New Azure Connection', 
+                    provider: SourceType.AZURE, 
+                    status: 'ACTIVE', 
+                    last_sync: 'Just now', 
+                    auth_method: AuthMethod.OAUTH 
+                }
+            ]);
+            
+            navigate('/connectors', { replace: true });
+            alert("Successfully authenticated with Microsoft Azure!");
+        }
+    }, [location, navigate]);
 
     const handleGenerateYaml = async () => {
         if (!saasDescription) return;
@@ -37,9 +69,9 @@ const Connectors: React.FC = () => {
 
     const handleProviderSelect = (type: SourceType) => {
         setSelectedProvider(type);
-        // Reset fields when switching providers
         setAwsRoleArn('');
         setTenantId('');
+        setClientId('');
         setSaasDescription('');
         setGeneratedYaml('');
     };
@@ -48,6 +80,7 @@ const Connectors: React.FC = () => {
         setSelectedProvider(null);
         setAwsRoleArn('');
         setTenantId('');
+        setClientId('');
         setSaasDescription('');
         setGeneratedYaml('');
         setIsModalOpen(true);
@@ -57,14 +90,31 @@ const Connectors: React.FC = () => {
         setSelectedProvider(connector.provider);
         setIsModalOpen(true);
 
-        // Pre-fill data based on the connector for demo purposes
         if (connector.provider === SourceType.AWS) {
             setAwsRoleArn('arn:aws:iam::123456789012:role/CSPMAccessRole'); 
         } else if (connector.provider === SourceType.AZURE) {
             setTenantId('550e8400-e29b-41d4-a716-446655440000');
+            setClientId('YOUR_APP_CLIENT_ID');
         } else if (connector.provider === SourceType.SAAS_GITHUB) {
             setSaasDescription("Connect to GitHub using OAuth2 to fetch repositories and user lists.");
         }
+    };
+
+    const handleAzureAuth = () => {
+        if (!tenantId || !clientId) {
+            alert("Please enter both Tenant ID and Client ID.");
+            return;
+        }
+
+        setIsConnectingAzure(true);
+
+        const redirectUri = window.location.origin;
+        const scope = encodeURIComponent('https://graph.microsoft.com/.default offline_access');
+        const state = 'azure_connect';
+
+        const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=${scope}&state=${state}`;
+
+        window.location.href = authUrl;
     };
 
     const resetModal = () => {
@@ -74,6 +124,17 @@ const Connectors: React.FC = () => {
         setSaasDescription('');
         setAwsRoleArn('');
         setTenantId('');
+        setClientId('');
+        setIsConnectingAzure(false);
+    };
+
+    const handlePrimaryAction = () => {
+        if (selectedProvider === SourceType.AZURE) {
+            handleAzureAuth();
+        } else {
+            // For AWS and Generic, we simulate saving and close
+            resetModal();
+        }
     };
 
     return (
@@ -258,11 +319,29 @@ const Connectors: React.FC = () => {
                                                     />
                                                     <p className="text-xs text-slate-500 mt-1">The Directory ID of your Azure Active Directory.</p>
                                                 </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-700 mb-1">Client ID (Application ID)</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={clientId}
+                                                        onChange={(e) => setClientId(e.target.value)}
+                                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" 
+                                                        placeholder="e.g. 12345678-abcd-1234-abcd-1234567890ab" 
+                                                    />
+                                                </div>
 
                                                 <div className="pt-4">
-                                                    <button className="w-full py-3 bg-[#0078d4] hover:bg-[#006abc] text-white rounded-lg font-medium flex items-center justify-center gap-2 shadow-sm">
-                                                        <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 0L0 0V10.5H10.5V0Z" fill="#F25022"/><path d="M21 0L10.5 0V10.5H21V0Z" fill="#7FBA00"/><path d="M10.5 10.5L0 10.5V21H10.5V10.5Z" fill="#00A4EF"/><path d="M21 10.5L10.5 10.5V21H21V10.5Z" fill="#FFB900"/></svg>
-                                                        Connect with Microsoft
+                                                    <button 
+                                                        onClick={handleAzureAuth}
+                                                        disabled={isConnectingAzure || !tenantId || !clientId}
+                                                        className="w-full py-3 bg-[#0078d4] hover:bg-[#006abc] text-white rounded-lg font-medium flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {isConnectingAzure ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 0L0 0V10.5H10.5V0Z" fill="#F25022"/><path d="M21 0L10.5 0V10.5H21V0Z" fill="#7FBA00"/><path d="M10.5 10.5L0 10.5V21H10.5V10.5Z" fill="#00A4EF"/><path d="M21 10.5L10.5 10.5V21H21V10.5Z" fill="#FFB900"/></svg>
+                                                        )}
+                                                        {isConnectingAzure ? 'Redirecting...' : 'Connect with Microsoft'}
                                                     </button>
                                                 </div>
                                             </div>
@@ -298,7 +377,7 @@ const Connectors: React.FC = () => {
                                                 disabled={isGenerating || !saasDescription}
                                                 className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex justify-center items-center gap-2"
                                             >
-                                                {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span> : <Code className="w-4 h-4" />}
+                                                {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> : <Code className="w-4 h-4" />}
                                                 Generate Connector Definition
                                             </button>
 
@@ -326,7 +405,7 @@ const Connectors: React.FC = () => {
                                 </button>
                                 <div className="flex gap-3">
                                     <button onClick={resetModal} className="px-4 py-2 text-slate-600 text-sm font-medium hover:text-slate-900">Cancel</button>
-                                    <button onClick={resetModal} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200">
+                                    <button onClick={handlePrimaryAction} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200">
                                         {selectedProvider === SourceType.AWS ? 'Verify & Save' : selectedProvider === SourceType.AZURE ? 'Initiate OAuth' : 'Save Definition'}
                                     </button>
                                 </div>
