@@ -1,11 +1,32 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
+  # שירות השרת (Node.js + SQLite)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: cspm-backend
     ports:
-      - "8080:80"   # Access UI at localhost:8080
-    environment:
-      - API_KEY=${API_KEY}
+      - "3001:3001"
     volumes:
-      - ./data:/app/data # Persist SQLite DB locally
+      # מיפוי קובץ ה-DB החוצה כדי שהמידע יישמר
+      - ./data:/app/data
+    environment:
+      - API_KEY=${API_KEY} # מפתח Gemini
+    restart: always
+
+  # שירות הקליינט (Nginx + React)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # הזרקת ה-API Key בזמן הבנייה אם הקוד משתמש בו בקליינט
+        - API_KEY=${API_KEY}
+    container_name: cspm-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: always
