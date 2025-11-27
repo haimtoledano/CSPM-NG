@@ -114,6 +114,7 @@ export interface User {
     last_login: string;
     mfaSecret?: string; // Encrypted or raw secret for TOTP
     isSuperAdmin?: boolean; // Only the first user gets this
+    avatarUrl?: string; // Custom profile image
 }
 
 export interface AuditLog {

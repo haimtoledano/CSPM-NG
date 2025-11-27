@@ -22,19 +22,6 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     }
 };
 
-// --- Helper for generating UUIDs in non-secure contexts (HTTP) ---
-const generateUUID = () => {
-    // Try native API first if available
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    // Fallback implementation
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // Session State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -172,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (existingUserIndex === -1 && users.length === 0) {
                 // Create Super Admin
                 userToSave = {
-                    id: generateUUID(), // FIX: Using custom helper instead of crypto.randomUUID()
+                    id: crypto.randomUUID(), // Use UUID
                     name: email.split('@')[0],
                     email: email,
                     role: 'Admin',

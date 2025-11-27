@@ -1,3 +1,4 @@
+
 import express from 'express';
 import Database from 'better-sqlite3';
 import cors from 'cors';
@@ -43,6 +44,7 @@ const initSchema = () => {
             last_login TEXT,
             mfa_secret TEXT,
             is_super_admin INTEGER DEFAULT 0,
+            avatar_url TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -72,6 +74,15 @@ const initSchema = () => {
         INSERT OR IGNORE INTO system_config (key, value) VALUES ('app_name', 'CSPM-NG');
         INSERT OR IGNORE INTO system_config (key, value) VALUES ('is_setup', 'true');
     `);
+    
+    // Migration: Attempt to add avatar_url if missing (for existing DBs)
+    try {
+        db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+        console.log("Migration: Added avatar_url column.");
+    } catch (e) {
+        // Column likely exists
+    }
+
     console.log("SQLite Schema Initialized.");
 };
 
@@ -113,7 +124,8 @@ app.get('/api/users', (req, res) => {
             status: u.status,
             last_login: u.last_login,
             mfaSecret: u.mfa_secret,
-            isSuperAdmin: !!u.is_super_admin
+            isSuperAdmin: !!u.is_super_admin,
+            avatarUrl: u.avatar_url
         }));
         res.json(formatted);
     } catch (e) {
@@ -122,19 +134,19 @@ app.get('/api/users', (req, res) => {
 });
 
 app.post('/api/users', (req, res) => {
-    const { id, name, email, role, mfaSecret, isSuperAdmin, status, last_login } = req.body;
+    const { id, name, email, role, mfaSecret, isSuperAdmin, status, last_login, avatarUrl } = req.body;
     try {
         const stmt = db.prepare(`
-            INSERT INTO users (id, name, email, role, mfa_secret, is_super_admin, status, last_login)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (id, name, email, role, mfa_secret, is_super_admin, status, last_login, avatar_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(email) DO UPDATE SET
-            name=excluded.name, role=excluded.role, mfa_secret=excluded.mfa_secret, last_login=excluded.last_login
+            name=excluded.name, role=excluded.role, mfa_secret=excluded.mfa_secret, last_login=excluded.last_login, avatar_url=excluded.avatar_url
         `);
         
         // Generate UUID if missing (e.g. initial seed)
         const finalId = id || crypto.randomUUID();
         
-        stmt.run(finalId, name, email, role, mfaSecret, isSuperAdmin ? 1 : 0, status, last_login);
+        stmt.run(finalId, name, email, role, mfaSecret, isSuperAdmin ? 1 : 0, status, last_login, avatarUrl);
         res.json({ success: true });
     } catch (e) {
         console.error(e);

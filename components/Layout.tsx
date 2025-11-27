@@ -104,10 +104,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                 <div className="p-4 border-t border-slate-800">
                     <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700">
-                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-                            <span className="text-xs font-bold text-slate-300">
-                                {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'JD'}
-                            </span>
+                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
+                            {currentUser?.avatarUrl ? (
+                                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="text-xs font-bold text-slate-300">
+                                    {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'JD'}
+                                </span>
+                            )}
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white truncate flex items-center gap-1">
