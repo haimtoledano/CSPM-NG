@@ -1,52 +1,62 @@
-import { DatabaseConfig, User } from '../types';
+import { DatabaseConfig, User, Connector, Asset, SystemConfig } from '../types';
 
 const API_BASE = '/api';
 
-export const apiService = {
-    // Check if backend is alive
-    checkSystemStatus: async (): Promise<{ isSetup: boolean }> => {
-        try {
-            const res = await fetch(`${API_BASE}/status`);
-            if (!res.ok) return { isSetup: false };
-            return await res.json();
-        } catch (e) {
-            return { isSetup: false };
-        }
-    },
-
-    // Update System Config (Branding)
-    updateSystemConfig: async (config: any): Promise<{ success: boolean }> => {
-        try {
-            await fetch(`${API_BASE}/setup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
-            return { success: true };
-        } catch (e) {
-            console.error(e);
-            return { success: false };
-        }
-    },
-
-    // Get Users from DB
-    getUsers: async (): Promise<User[]> => {
-        const res = await fetch(`${API_BASE}/users`);
-        if (!res.ok) throw new Error("Failed to fetch users");
-        return await res.json();
-    },
-
-    // Upsert User to DB
-    syncUser: async (user: User): Promise<void> => {
-        await fetch(`${API_BASE}/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(user)
-        });
-    },
-
-    // Setup Database - No-op for SQLite (it's auto)
-    setupDatabase: async (config: DatabaseConfig): Promise<{ success: boolean; message?: string }> => {
-        return { success: true, message: 'SQLite is auto-configured.' };
+// Generic Fetch Wrapper
+const request = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+    });
+    
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(error.error || `API Error ${res.status}`);
     }
+    return res.json();
+};
+
+export const apiService = {
+    // System
+    checkSystemStatus: () => request<{ isSetup: boolean }>('/status').catch(() => ({ isSetup: false })),
+    
+    updateSystemConfig: (config: Partial<SystemConfig>) => request<{ success: boolean }>('/setup', {
+        method: 'POST',
+        body: JSON.stringify(config)
+    }),
+
+    // Users
+    getUsers: () => request<User[]>('/users'),
+    
+    syncUser: (user: User) => request<void>('/users', {
+        method: 'POST',
+        body: JSON.stringify(user)
+    }),
+
+    // Connectors
+    getConnectors: () => request<Connector[]>('/connectors').catch(() => []),
+    
+    addConnector: (connector: Connector) => request<void>('/connectors', {
+        method: 'POST',
+        body: JSON.stringify(connector)
+    }),
+
+    deleteConnector: (id: string) => request<void>(`/connectors/${id}`, {
+        method: 'DELETE'
+    }),
+
+    syncConnector: (id: string) => request<void>(`/connectors/${id}/sync`, {
+        method: 'POST'
+    }),
+
+    // Assets
+    getAssets: () => request<Asset[]>('/assets').catch(() => []),
+    
+    addAsset: (asset: Asset) => request<void>('/assets', {
+        method: 'POST',
+        body: JSON.stringify(asset)
+    }),
+
+    // DB Setup (Mock for SQLite, used by frontend logic)
+    setupDatabase: async (config: DatabaseConfig) => ({ success: true, message: 'SQLite is auto-configured.' })
 };
