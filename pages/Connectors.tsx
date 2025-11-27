@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Badge } from '../components/Widgets';
 import { Connector, SourceType, AuthMethod } from '../types';
 import { generateConnectorYaml } from '../services/geminiService';
-import { Cloud, Plus, Command, RefreshCw, Key, Code, Lock, ExternalLink, Shield, CheckCircle, Copy, Loader2 } from 'lucide-react';
+import { Cloud, Plus, Command, RefreshCw, Key, Code, Lock, ExternalLink, Shield, CheckCircle, Copy, Loader2, Info } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const MOCK_CONNECTORS: Connector[] = [
@@ -35,6 +35,9 @@ const Connectors: React.FC = () => {
 
     // Check for OAuth Code on Mount
     useEffect(() => {
+        // In HashRouter, the query params from the provider (like ?code=...) often land BEFORE the hash.
+        // e.g. https://domain.com/?code=123&state=xyz#/connectors
+        // We must check window.location.search directly.
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         const state = params.get('state');
@@ -42,6 +45,7 @@ const Connectors: React.FC = () => {
         if (code && state === 'azure_connect') {
             console.log("Received Azure Auth Code:", code);
             
+            // Add the new connector
             setConnectors(prev => [
                 ...prev,
                 { 
@@ -54,10 +58,13 @@ const Connectors: React.FC = () => {
                 }
             ]);
             
-            navigate('/connectors', { replace: true });
-            alert("Successfully authenticated with Microsoft Azure!");
+            // CRITICAL FIX: Explicitly clear the query parameters from the main URL.
+            // navigate() only changes the hash path in HashRouter, leaving ?code=... in the main URL,
+            // which causes this effect to run again on refresh or re-render.
+            const cleanUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, document.title, cleanUrl);
         }
-    }, [location, navigate]);
+    }, []); // Run once on mount
 
     const handleGenerateYaml = async () => {
         if (!saasDescription) return;
@@ -317,7 +324,10 @@ const Connectors: React.FC = () => {
                                                         className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" 
                                                         placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000" 
                                                     />
-                                                    <p className="text-xs text-slate-500 mt-1">The Directory ID of your Azure Active Directory.</p>
+                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                        <Info className="w-3 h-3" />
+                                                        Found in <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/Overview" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Azure Active Directory &gt; Overview</a>
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-medium text-slate-700 mb-1">Client ID (Application ID)</label>
@@ -328,6 +338,10 @@ const Connectors: React.FC = () => {
                                                         className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" 
                                                         placeholder="e.g. 12345678-abcd-1234-abcd-1234567890ab" 
                                                     />
+                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                        <Info className="w-3 h-3" />
+                                                        Found in <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">App Registrations &gt; [Your App] &gt; Overview</a>
+                                                    </p>
                                                 </div>
 
                                                 <div className="pt-4">
